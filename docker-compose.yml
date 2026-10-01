@@ -1,0 +1,8 @@
+# Поднимает оба чистых Laravel-сервиса в сети tg_autificator.
+# Каждый сервис можно запустить отдельно из своей папки.
+
+name: tg-autificator
+
+include:
+  - ./auth-service/docker-compose.yml
+  - ./telegram-service/docker-compose.yml

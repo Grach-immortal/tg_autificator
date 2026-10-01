@@ -1,0 +1,109 @@
+name: tg-autificator
+
+services:
+  auth-app:
+    build: .
+    container_name: auth-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: auth-db
+      DB_PORT: 3306
+      DB_DATABASE: auth_service
+      DB_USERNAME: auth
+      DB_PASSWORD: auth
+      APP_URL: http://localhost:8080
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    networks:
+      - tg_autificator
+
+  auth-scheduler:
+    build: .
+    container_name: auth-scheduler
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: auth-db
+      DB_PORT: 3306
+      DB_DATABASE: auth_service
+      DB_USERNAME: auth
+      DB_PASSWORD: auth
+      APP_URL: http://localhost:8080
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      auth-app:
+        condition: service_started
+    entrypoint: ["php", "artisan", "schedule:work"]
+    networks:
+      - tg_autificator
+
+  auth-nginx:
+    image: nginx:1.27-alpine
+    container_name: auth-nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/html
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - auth-app
+    networks:
+      - tg_autificator
+
+  auth-db:
+    image: mysql:8.4
+    container_name: auth-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: auth_service
+      MYSQL_USER: auth
+      MYSQL_PASSWORD: auth
+      MYSQL_ROOT_PASSWORD: authroot
+    ports:
+      - "33060:3306"
+    volumes:
+      - auth-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uauth", "-pauth"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - tg_autificator
+
+  auth-phpmyadmin:
+    image: phpmyadmin:5.2
+    container_name: auth-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: auth-db
+      PMA_PORT: 3306
+      PMA_USER: auth
+      PMA_PASSWORD: auth
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "8082:80"
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    networks:
+      - tg_autificator
+
+volumes:
+  auth-db-data:
+
+networks:
+  tg_autificator:
+    name: tg_autificator

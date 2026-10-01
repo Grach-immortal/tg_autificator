@@ -1,0 +1,137 @@
+name: tg-autificator
+
+services:
+  tg-app:
+    build: .
+    container_name: tg-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: tg-db
+      DB_PORT: 3306
+      DB_DATABASE: telegram_service
+      DB_USERNAME: telegram
+      DB_PASSWORD: telegram
+      APP_URL: http://localhost:8081
+      AUTH_SERVICE_URL: http://auth-nginx
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      tg-db:
+        condition: service_healthy
+    networks:
+      - tg_autificator
+
+  tg-poller:
+    build: .
+    container_name: tg-poller
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: tg-db
+      DB_PORT: 3306
+      DB_DATABASE: telegram_service
+      DB_USERNAME: telegram
+      DB_PASSWORD: telegram
+      APP_URL: http://localhost:8081
+      AUTH_SERVICE_URL: http://auth-nginx
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      tg-db:
+        condition: service_healthy
+      tg-app:
+        condition: service_started
+    entrypoint: ["php", "artisan", "telegram:poll"]
+    networks:
+      - tg_autificator
+
+  tg-scheduler:
+    build: .
+    container_name: tg-scheduler
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: tg-db
+      DB_PORT: 3306
+      DB_DATABASE: telegram_service
+      DB_USERNAME: telegram
+      DB_PASSWORD: telegram
+      APP_URL: http://localhost:8081
+      AUTH_SERVICE_URL: http://auth-nginx
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      tg-db:
+        condition: service_healthy
+      tg-app:
+        condition: service_started
+    entrypoint: ["php", "artisan", "schedule:work"]
+    networks:
+      - tg_autificator
+
+  tg-nginx:
+    image: nginx:1.27-alpine
+    container_name: tg-nginx
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    volumes:
+      - .:/var/www/html
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - tg-app
+    networks:
+      - tg_autificator
+
+  tg-db:
+    image: mysql:8.4
+    container_name: tg-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: telegram_service
+      MYSQL_USER: telegram
+      MYSQL_PASSWORD: telegram
+      MYSQL_ROOT_PASSWORD: telegramroot
+    ports:
+      - "33061:3306"
+    volumes:
+      - tg-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-utelegram", "-ptelegram"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - tg_autificator
+
+  tg-phpmyadmin:
+    image: phpmyadmin:5.2
+    container_name: tg-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: tg-db
+      PMA_PORT: 3306
+      PMA_USER: telegram
+      PMA_PASSWORD: telegram
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "8083:80"
+    depends_on:
+      tg-db:
+        condition: service_healthy
+    networks:
+      - tg_autificator
+
+volumes:
+  tg-db-data:
+
+networks:
+  tg_autificator:
+    name: tg_autificator
